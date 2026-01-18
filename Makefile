@@ -1,6 +1,6 @@
 all: release
 
-system:
+system:asdasdasd
 	./scripts/image
 
 release:
