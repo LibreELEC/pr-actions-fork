@@ -1,0 +1,116 @@
+on:
+  push:
+    # adjust branch pattern as needed
+    branches:
+      - 'create-pr/**'
+  workflow_dispatch:
+
+name: Create PR in upstream (via GitHub App)
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install octokit libraries
+        run: npm install @octokit/rest @octokit/auth-app
+
+      - name: Write create-pr script
+        run: |
+          cat > create-pr.js <<'JS'
+          const { createAppAuth } = require("@octokit/auth-app");
+          const { Octokit } = require("@octokit/rest");
+
+          (async () => {
+            const {
+              APP_ID,
+              APP_PRIVATE_KEY,
+              UPSTREAM_OWNER,
+              UPSTREAM_REPO,
+              HEAD_OWNER,
+              HEAD_BRANCH,
+              BASE_BRANCH,
+            } = process.env;
+
+            if (!APP_ID || !APP_PRIVATE_KEY) {
+              console.error("Missing APP_ID or APP_PRIVATE_KEY (set as secrets).");
+              process.exit(1);
+            }
+
+            const auth = createAppAuth({
+              appId: APP_ID,
+              privateKey: APP_PRIVATE_KEY,
+            });
+
+            // Authenticate as the App (JWT)
+            const appAuthentication = await auth({ type: "app" });
+            const octokit = new Octokit({ auth: appAuthentication.token });
+
+            // Get installation for the upstream repo
+            const { data: installation } = await octokit.rest.apps.getRepoInstallation({
+              owner: UPSTREAM_OWNER,
+              repo: UPSTREAM_REPO,
+            });
+
+            const installationId = installation.id;
+
+            // Exchange to get an installation token
+            const installationAuthentication = await auth({
+              type: "installation",
+              installationId,
+            });
+
+            const installationOctokit = new Octokit({ auth: installationAuthentication.token });
+
+            // Compose PR data
+            const head = `${HEAD_OWNER}:${HEAD_BRANCH}`;
+            const title = `Automated PR: ${HEAD_BRANCH}`;
+            const body = `This PR was created by the GitHub App from ${process.env.GITHUB_REPOSITORY} (branch ${HEAD_BRANCH}).`;
+
+            // Create the PR
+            const response = await installationOctokit.rest.pulls.create({
+              owner: UPSTREAM_OWNER,
+              repo: UPSTREAM_REPO,
+              title,
+              head,
+              base: BASE_BRANCH || "main",
+              body,
+            });
+
+            console.log("Pull request created: ", response.data.html_url);
+          })().catch(err => {
+            console.error(err);
+            process.exit(1);
+          });
+          JS
+
+      - name: Run create-pr script
+        env:
+          # App secrets (set these on the fork repo)
+          APP_ID: ${{ secrets.APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+
+          # Upstream target (adjust if different)
+          UPSTREAM_OWNER: LibreELEC
+          UPSTREAM_REPO: pr-actions
+
+          # The owner where the feature branch lives (set to the account that contains the branch)
+          # If your branch is on this fork, this should be the owner of this repo.
+          # Example: if fork is LibreELEC/testrepo2 and branch is on that repo, set HEAD_OWNER: LibreELEC
+          HEAD_OWNER: LibreELEC
+
+          # Branch to open PR from — current branch name
+          HEAD_BRANCH: ${{ github.ref_name }}
+
+          # Base branch in upstream
+          BASE_BRANCH: master
+        run: node create-pr.js
