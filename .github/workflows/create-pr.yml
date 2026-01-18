@@ -20,57 +20,55 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           repository: LibreELEC/pr-actions-fork
           ref: testy5554
-      # - name: Create Pull Request
-      #   env:
-      #     GH_TOKEN: ${{ steps.app-token.outputs.token }}
-      #   run: |
-      #     git ls-remote https://github.com/LibreELEC/pr-actions-fork.git testy5554
-      #     echo "-------"
-      #     gh api repos/LibreELEC/pr-actions/pulls \
-      #       -f title="Test PR from fork (testy5554)" \
-      #       -f head="pr-actions-fork:testy5554" \
-      #       -f base="master" \
-      #       -f body="Automated PR created from LibreELEC/pr-actions-fork using a GitHub App token."
-      - name: Create Pull Request (GraphQL – fork-safe)
+      - name: Create Pull Request
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          set -e
-      
-          # Get repository IDs
-          BASE_REPO_ID=$(gh api graphql -f query='
-            query {
-              repository(owner: "LibreELEC", name: "pr-actions") {
-                id
-              }
-            }' --jq '.data.repository.id')
-      
-          HEAD_REPO_ID=$(gh api graphql -f query='
-            query {
-              repository(owner: "LibreELEC", name: "pr-actions-fork") {
-                id
-              }
-            }' --jq '.data.repository.id')
-      
-          # Create pull request
-          gh api graphql -f query='
-            mutation(
-              $baseRepo: ID!,
-              $headRepo: ID!
-            ) {
-              createPullRequest(input: {
-                repositoryId: $baseRepo
-                baseRefName: "master"
-                headRefName: "testy5554"
-                headRepositoryId: $headRepo
-                title: "Test PR from fork (testy5554)"
-                body: "Automated PR created using GitHub App token via GraphQL."
-              }) {
-                pullRequest {
-                  number
-                  url
-                }
-              }
-            }' \
-            -f baseRepo="$BASE_REPO_ID" \
-            -f headRepo="$HEAD_REPO_ID"
+          GH_DEBUG=api gh pr create \
+            --repo LibreELEC/pr-actions \
+            --base master \
+            --head pr-actions-fork:testy5554 \
+            --title "Test PR from fork (testy5554)" \
+            --body "Automated PR created using GitHub App token."
+      # - name: Create Pull Request (GraphQL – fork-safe)
+      #   env:
+      #     GH_TOKEN: ${{ steps.app-token.outputs.token }}
+      #   run: |
+      #     set -e
+      #     # Get repository IDs
+      #     BASE_REPO_ID=$(gh api graphql -f query='
+      #       query {
+      #         repository(owner: "LibreELEC", name: "pr-actions") {
+      #           id
+      #         }
+      #       }' --jq '.data.repository.id')
+
+      #     HEAD_REPO_ID=$(gh api graphql -f query='
+      #       query {
+      #         repository(owner: "LibreELEC", name: "pr-actions-fork") {
+      #           id
+      #         }
+      #       }' --jq '.data.repository.id')
+
+      #     # Create pull request
+      #     gh api graphql -f query='
+      #       mutation(
+      #         $baseRepo: ID!,
+      #         $headRepo: ID!
+      #       ) {
+      #         createPullRequest(input: {
+      #           repositoryId: $baseRepo
+      #           baseRefName: "master"
+      #           headRefName: "testy5554"
+      #           headRepositoryId: $headRepo
+      #           title: "Test PR from fork (testy5554)"
+      #           body: "Automated PR created using GitHub App token via GraphQL."
+      #         }) {
+      #           pullRequest {
+      #             number
+      #             url
+      #           }
+      #         }
+      #       }' \
+      #       -f baseRepo="$BASE_REPO_ID" \
+      #       -f headRepo="$HEAD_REPO_ID"
